@@ -159,6 +159,83 @@ public class SimplePdfDocument
     /// <param name="filePath">The file path to save the PDF.</param>
     public void Save(string filePath)
     {
-        // Save logic here
+        using var fs = new System.IO.FileStream(filePath, System.IO.FileMode.Create, System.IO.FileAccess.Write);
+        using var writer = new System.IO.StreamWriter(fs, System.Text.Encoding.ASCII);
+
+        // PDF Header
+        writer.WriteLine("%PDF-1.4");
+
+        int objIndex = 1;
+        var xref = new System.Collections.Generic.List<long>();
+        xref.Add(0); // First entry is always 0
+
+        // Font object (using Helvetica as example)
+        long fontObjPos = fs.Position;
+        xref.Add(fontObjPos);
+        writer.WriteLine($"{objIndex} 0 obj");
+        writer.WriteLine("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+        writer.WriteLine("endobj");
+        int fontObjNum = objIndex++;
+
+        // Write each page's content stream and page object
+        var pageObjNums = new System.Collections.Generic.List<int>();
+        var contentObjNums = new System.Collections.Generic.List<int>();
+        foreach (var page in Pages)
+        {
+            // Content stream object
+            long contentObjPos = fs.Position;
+            xref.Add(contentObjPos);
+            writer.WriteLine($"{objIndex} 0 obj");
+            var contentBytes = page.GetContentStreamBytes();
+            writer.WriteLine($"<< /Length {contentBytes.Length} >>");
+            writer.WriteLine("stream");
+            writer.Flush();
+            fs.Write(contentBytes, 0, contentBytes.Length);
+            writer.WriteLine();
+            writer.WriteLine("endstream");
+            writer.WriteLine("endobj");
+            int contentObjNum = objIndex++;
+            contentObjNums.Add(contentObjNum);
+
+            // Page object
+            long pageObjPos = fs.Position;
+            xref.Add(pageObjPos);
+            writer.WriteLine($"{objIndex} 0 obj");
+            writer.WriteLine($"<< /Type /Page /Parent 0 0 R /MediaBox [0 0 {page.Size.Width} {page.Size.Height}] /Contents {contentObjNum} 0 R /Resources << /Font << /F1 {fontObjNum} 0 R >> >> >>");
+            writer.WriteLine("endobj");
+            pageObjNums.Add(objIndex++);
+        }
+
+        // Pages object
+        long pagesObjPos = fs.Position;
+        xref.Add(pagesObjPos);
+        writer.WriteLine($"{objIndex} 0 obj");
+        writer.WriteLine("<< /Type /Pages /Kids [");
+        foreach (var pageNum in pageObjNums)
+            writer.WriteLine($"{pageNum} 0 R");
+        writer.WriteLine($"] /Count {Pages.Count} >>");
+        writer.WriteLine("endobj");
+        int pagesObjNum = objIndex++;
+
+        // Catalog object
+        long catalogObjPos = fs.Position;
+        xref.Add(catalogObjPos);
+        writer.WriteLine($"{objIndex} 0 obj");
+        writer.WriteLine($"<< /Type /Catalog /Pages {pagesObjNum} 0 R >>");
+        writer.WriteLine("endobj");
+        int catalogObjNum = objIndex++;
+
+        // XRef table
+        long xrefPos = fs.Position;
+        writer.WriteLine("xref");
+        writer.WriteLine($"0 {xref.Count}");
+        foreach (var pos in xref)
+            writer.WriteLine($"{pos:0000000000} 00000 n ");
+        // Trailer
+        writer.WriteLine("trailer");
+        writer.WriteLine($"<< /Size {xref.Count} /Root {catalogObjNum} 0 R >>");
+        writer.WriteLine("startxref");
+        writer.WriteLine(xrefPos);
+        writer.WriteLine("%%EOF");
     }
 }

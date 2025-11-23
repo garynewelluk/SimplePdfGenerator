@@ -40,6 +40,28 @@ public readonly struct Margin
 public class PdfPage
 {
     /// <summary>
+    /// Adds text to the PDF content stream at the specified position, with font and size.
+    /// </summary>
+    /// <param name="text">The text to add.</param>
+    /// <param name="x">The x-coordinate (user units).</param>
+    /// <param name="y">The y-coordinate (user units).</param>
+    /// <param name="fontName">The font resource name (e.g., F1).</param>
+    /// <param name="fontSize">The font size in points.</param>
+    /// <param name="layout">The PageLayout instance for coordinate conversion.</param>
+    /// <param name="fontManager">The PdfFontManager instance for font lookup.</param>
+    public void AddText(string text, double x, double y, string fontName, double fontSize, PageLayout layout, PdfFontManager fontManager)
+    {
+        // Convert coordinates if needed
+        var (pdfX, pdfY) = layout.ToPdfCoordinates(x, y, Size.Height);
+        // Use fontName as the PDF resource name (e.g., F1, F2, etc.)
+        // Write PDF text operators: BT ... ET
+        // Example: BT /F1 12 Tf 100 700 Td (Hello) Tj ET
+        string fontResource = $"/{fontName}";
+        string escapedText = text.Replace("(", "\\(").Replace(")", "\\)");
+        string command = $"BT {fontResource} {fontSize} Tf {pdfX:0.##} {pdfY:0.##} Td ({escapedText}) Tj ET";
+        AddCommand(command);
+    }
+    /// <summary>
     /// The content stream containing PDF drawing commands for this page as a byte stream.
     /// </summary>
     public System.IO.MemoryStream ContentStream { get; } = new System.IO.MemoryStream();
